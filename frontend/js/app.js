@@ -634,7 +634,20 @@ function drawTrack(points, type) {
 async function showEntityTrack(type, id) {
   const endTs = liveMode ? null : replayTs;
   const { points } = await fetchTrack(type, id, 12, endTs).catch(() => ({ points: [] }));
-  drawTrack(points, type);
+
+  // For planes, only show the current flight by trimming at any gap > 30 min.
+  // The same icao24 may have flown multiple routes in the 12-hour window.
+  let track = points;
+  if (type === 'plane' && points.length > 1) {
+    const GAP_S = 30 * 60;
+    let segStart = 0;
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].ts - points[i - 1].ts > GAP_S) segStart = i;
+    }
+    track = points.slice(segStart);
+  }
+
+  drawTrack(track, type);
 }
 
 /**
