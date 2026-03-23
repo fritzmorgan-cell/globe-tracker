@@ -22,7 +22,7 @@ load_dotenv()
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import planes, ships, flight_info, ship_info, history, satellites
+from routers import planes, ships, flight_info, ship_info, history, satellites, airports
 from services import aisstream_client
 import db
 
@@ -67,6 +67,7 @@ app.include_router(flight_info.router, prefix="/api")
 app.include_router(ship_info.router,   prefix="/api")
 app.include_router(history.router,     prefix="/api")
 app.include_router(satellites.router,  prefix="/api")
+app.include_router(airports.router,    prefix="/api")
 
 
 @app.get("/health")

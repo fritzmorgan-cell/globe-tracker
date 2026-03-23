@@ -114,6 +114,16 @@ async function fetchFlightInfo(callsign, icao24) {
 }
 
 /**
+ * Fetch all commercial airports (loaded once at startup, cached 24 h on server).
+ * @returns {Promise<Array<{iata,name,city,country,lat,lon,elevation_ft,altitude,type}>>}
+ */
+async function fetchAirports() {
+  const res = await fetch(`${API_BASE}/api/airports`);
+  if (!res.ok) throw new Error(`Airports API ${res.status}`);
+  return res.json();
+}
+
+/**
  * Fetch vessel type description and photo URL for an MMSI.
  * @param {string} mmsi
  * @param {number|null} typeCode  AIS vessel type integer

@@ -95,9 +95,13 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .dot-plane { background: #4fc3f7; }
-    .dot-ship  { background: #aed581; }
-    .dot-sat   { background: #ce93d8; }
+    .dot-plane    { background: #4fc3f7; }
+    .dot-ship     { background: #aed581; }
+    .dot-sat      { background: #ce93d8; }
+    .dot-airport  { background: #ffb300; }
+
+    /* Airport checkbox accent */
+    #toggleAirports { accent-color: #ffb300; }
 
     /* ── Status bar ────────────────────────────────────────────────────── */
     #statusBar {
@@ -155,7 +159,10 @@
       box-shadow: 0 8px 40px rgba(0,0,0,0.7);
     }
 
-    #infoModal.ship-mode { border-color: rgba(174, 213, 129, 0.35); }
+    #infoModal.ship-mode    { border-color: rgba(174, 213, 129, 0.35); }
+    #infoModal.airport-mode { border-color: rgba(255, 179, 0, 0.35); }
+    #infoModal.airport-mode .modal-title      { color: #ffb300; }
+    #infoModal.airport-mode .modal-type-badge { background: rgba(255, 179, 0, 0.15); color: #ffb300; }
     #infoModal.visible   { display: block; }
 
     /* Photo banner */
@@ -358,6 +365,12 @@
       <input type="checkbox" id="toggleSats" checked />
       <span class="dot dot-sat"></span>
       Satellites
+    </label>
+
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggleAirports" checked />
+      <span class="dot dot-airport"></span>
+      Airports
     </label>
 
     <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">

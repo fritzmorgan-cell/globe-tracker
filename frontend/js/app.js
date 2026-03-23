@@ -222,6 +222,12 @@ const SHIP_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(`
 </svg>
 `)}`;
 
+const AIRPORT_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14">
+  <circle cx="7" cy="7" r="5.5" fill="#ffb300" stroke="#e65100" stroke-width="1"/>
+</svg>
+`)}`;
+
 // ─── Entity layers ────────────────────────────────────────────────────────────
 
 const planeLayer = new EntityLayer(viewer, {
@@ -238,6 +244,15 @@ const shipLayer = new EntityLayer(viewer, {
   billboardUrl:   SHIP_ICON,
   billboardScale: 0.8,
   labelColor:     Cesium.Color.fromCssColorString('#aed581'),
+});
+
+const airportLayer = new EntityLayer(viewer, {
+  idField:          'iata',
+  labelField:       'iata',
+  billboardUrl:     AIRPORT_ICON,
+  billboardScale:   1.0,
+  labelColor:       Cesium.Color.fromCssColorString('#ffb300'),
+  labelMaxDistance: 2_000_000,  // show IATA labels up to 2 000 km
 });
 
 const SAT_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(`
@@ -377,6 +392,23 @@ document.getElementById('satGroup').addEventListener('change', e => {
 
 // Initial load.
 loadSatelliteGroup('visual');
+
+// ─── Airport layer ────────────────────────────────────────────────────────────
+
+/** Fetch all airports once and populate the layer. Called once at startup. */
+async function loadAirports() {
+  try {
+    const airports = await fetchAirports();
+    airportLayer.update(airports);
+    console.log(`[airports] loaded ${airports.length} airports`);
+  } catch (err) {
+    console.error('[airports]', err);
+  }
+}
+
+document.getElementById('toggleAirports').addEventListener('change', e => {
+  airportLayer.setVisible(e.target.checked);
+});
 
 // ─── Bounding box ─────────────────────────────────────────────────────────────
 
@@ -624,8 +656,41 @@ function _setPhoto(thumbUrl, placeholderEmoji) {
   modalPhoto.src = thumbUrl;
 }
 
-function openPlaneModal(plane) {
+function _airportTypeLabel(type) {
+  if (type === 'large_airport')  return 'Large Airport';
+  if (type === 'medium_airport') return 'Medium Airport';
+  if (type === 'small_airport')  return 'Small Airport';
+  return 'Airport';
+}
+
+function openAirportModal(airport) {
   modal.classList.remove('ship-mode');
+  modal.classList.add('airport-mode');
+  document.getElementById('modalTitle').textContent     = airport.iata;
+  document.getElementById('modalSubtitle').textContent  = airport.name || '';
+  document.getElementById('modalTypeBadge').textContent = _airportTypeLabel(airport.type);
+  document.getElementById('modalRoute').classList.add('hidden');
+  document.getElementById('statLabel1').textContent = 'City';
+  document.getElementById('statLabel2').textContent = 'Country';
+  document.getElementById('statLabel3').textContent = 'Elevation';
+  document.getElementById('statLabel4').textContent = 'Coordinates';
+  document.getElementById('modalStat1').textContent = airport.city    || '—';
+  document.getElementById('modalStat2').textContent = airport.country || '—';
+  document.getElementById('modalStat3').textContent = airport.elevation_ft != null
+    ? `${airport.elevation_ft.toLocaleString()} ft` : '—';
+  document.getElementById('modalStat4').textContent = airport.lat != null
+    ? `${airport.lat.toFixed(2)}°, ${airport.lon.toFixed(2)}°` : '—';
+  document.getElementById('modalFooter').textContent = '';
+  modalPhoto.classList.remove('loaded');
+  modalPhotoPlaceholder.classList.add('hidden');
+  _selectEntity(airport.iata);
+  _positionModal();
+  modal.classList.add('visible');
+  clearAllTracks();
+}
+
+function openPlaneModal(plane) {
+  modal.classList.remove('ship-mode', 'airport-mode');
   document.getElementById('modalTitle').textContent    = plane.callsign || plane.id;
   document.getElementById('modalSubtitle').textContent = 'Loading route…';
   document.getElementById('modalTypeBadge').textContent = '';
@@ -690,6 +755,7 @@ function openPlaneModal(plane) {
 }
 
 function openShipModal(ship) {
+  modal.classList.remove('airport-mode');
   modal.classList.add('ship-mode');
   document.getElementById('modalTitle').textContent    = ship.name || ship.mmsi;
   document.getElementById('modalSubtitle').textContent = 'Loading vessel info…';
@@ -728,7 +794,7 @@ function openShipModal(ship) {
 }
 
 document.getElementById('modalClose').addEventListener('click', () => {
-  modal.classList.remove('visible');
+  modal.classList.remove('visible', 'ship-mode', 'airport-mode');
   modalPhoto.src = '';
   clearAllTracks();
   _clearSelection();
@@ -744,6 +810,8 @@ viewer.screenSpaceEventHandler.setInputAction((click) => {
 
   if (props.mmsi !== undefined) {
     openShipModal(props);
+  } else if (props.iata !== undefined) {
+    openAirportModal(props);
   } else if (props.altitude !== undefined && props.id !== undefined && !props.callsign !== undefined && _satrecs.some(s => s.id === String(props.id))) {
     // Satellite entity — find its satrec and draw orbital track.
     const sat = _satrecs.find(s => s.id === String(props.id));
@@ -894,6 +962,7 @@ document.getElementById('toggleShips').addEventListener('change', (e) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
+loadAirports();
 pollAll();
 pollHandle = setInterval(pollAll, POLL_INTERVAL_MS);
 
