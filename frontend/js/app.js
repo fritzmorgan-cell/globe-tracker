@@ -62,15 +62,15 @@ viewer.camera.setView({
   destination: Cesium.Cartesian3.fromDegrees(0, 20, 18_000_000),
 });
 
-// ─── Roads tile overlay (CartoDB Light, roads + city shapes, no labels) ───────
+// ─── Roads tile overlay (CartoDB Voyager, no labels — roads are clearly styled)
 const _roadsLayer = viewer.imageryLayers.addImageryProvider(
   new Cesium.UrlTemplateImageryProvider({
-    url: 'https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
+    url: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',
     maximumLevel: 19,
     credit: '© OpenStreetMap contributors, © CARTO',
   })
 );
-_roadsLayer.alpha = 0.35;
+_roadsLayer.alpha = 0.5;
 _roadsLayer.show  = true;
 
 // ─── Icons (inline SVG data URIs — no extra network request) ─────────────────
@@ -405,43 +405,71 @@ document.getElementById('satGroup').addEventListener('change', e => {
 // Initial load.
 loadSatelliteGroup('visual');
 
-// ─── Borders (country + state/province outlines via Natural Earth GeoJSON) ────
+// ─── Borders (GroundPolylinePrimitive — correctly draped on terrain) ──────────
+// GeoJsonDataSource polygon outlines are incompatible with terrain clamping in
+// Cesium (they are silently disabled). Instead we fetch the boundary LINE files
+// from Natural Earth and create GroundPolylinePrimitive instances directly.
 
-let _borderSources = [];
+let _borderPrimitives = [];
+
+/**
+ * Fetch a GeoJSON URL and add every line/ring as a GroundPolylinePrimitive.
+ * Handles LineString, MultiLineString, Polygon, and MultiPolygon geometries.
+ */
+async function _loadAsGroundLines(url, color, width) {
+  const resp = await fetch(url);
+  const gj   = await resp.json();
+  const out   = [];
+
+  function addLine(coords) {
+    if (coords.length < 2) return;
+    const positions = Cesium.Cartesian3.fromDegreesArray(
+      coords.flatMap(([lon, lat]) => [lon, lat])
+    );
+    out.push(viewer.scene.groundPrimitives.add(
+      new Cesium.GroundPolylinePrimitive({
+        geometryInstances: new Cesium.GeometryInstance({
+          geometry: new Cesium.GroundPolylineGeometry({ positions, width }),
+          attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(color) },
+        }),
+        appearance: new Cesium.PolylineColorAppearance(),
+      })
+    ));
+  }
+
+  for (const feat of gj.features) {
+    const g = feat.geometry;
+    if (!g) continue;
+    if      (g.type === 'LineString')      addLine(g.coordinates);
+    else if (g.type === 'MultiLineString') g.coordinates.forEach(addLine);
+    else if (g.type === 'Polygon')         g.coordinates.forEach(addLine);
+    else if (g.type === 'MultiPolygon')    g.coordinates.forEach(p => p.forEach(addLine));
+  }
+  return out;
+}
 
 async function loadBoundaries() {
-  if (_borderSources.length > 0) return;  // already loaded
-  try {
-    const base = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0';
-    const [countries, states] = await Promise.all([
-      Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_0_countries.geojson`, {
-        fill:         Cesium.Color.TRANSPARENT,
-        stroke:       Cesium.Color.WHITE.withAlpha(0.65),
-        strokeWidth:  1.5,
-        clampToGround: true,
-      }),
-      Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_1_states_provinces.geojson`, {
-        fill:         Cesium.Color.TRANSPARENT,
-        stroke:       Cesium.Color.WHITE.withAlpha(0.35),
-        strokeWidth:  0.8,
-        clampToGround: true,
-      }),
-    ]);
-    viewer.dataSources.add(countries);
-    viewer.dataSources.add(states);
-    _borderSources = [countries, states];
-    console.log('[borders] loaded');
-  } catch (err) {
-    console.error('[borders]', err);
-  }
+  if (_borderPrimitives.length > 0) return;
+  const base = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0';
+  const [cr, sr] = await Promise.allSettled([
+    _loadAsGroundLines(`${base}/ne_50m_admin_0_boundary_lines_land.geojson`,
+      Cesium.Color.WHITE.withAlpha(0.7), 1.5),
+    _loadAsGroundLines(`${base}/ne_50m_admin_1_states_provinces_lines.geojson`,
+      Cesium.Color.WHITE.withAlpha(0.4), 0.8),
+  ]);
+  if (cr.status === 'fulfilled') _borderPrimitives.push(...cr.value);
+  else console.error('[borders countries]', cr.reason);
+  if (sr.status === 'fulfilled') _borderPrimitives.push(...sr.value);
+  else console.error('[borders states]', sr.reason);
+  console.log(`[borders] loaded ${_borderPrimitives.length} segments`);
 }
 
 document.getElementById('toggleBorders').addEventListener('change', async e => {
   if (e.target.checked) {
-    await loadBoundaries();
-    _borderSources.forEach(ds => { ds.show = true; });
+    if (_borderPrimitives.length === 0) await loadBoundaries();
+    _borderPrimitives.forEach(p => { p.show = true; });
   } else {
-    _borderSources.forEach(ds => { ds.show = false; });
+    _borderPrimitives.forEach(p => { p.show = false; });
   }
 });
 
