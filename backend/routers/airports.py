@@ -19,7 +19,7 @@ router = APIRouter()
 AIRPORTS_CSV_URL = "https://ourairports.com/data/airports.csv"
 CACHE_TTL = 86_400  # 24 hours
 
-_cache: tuple[float, list] | None = None
+_cache = None  # (monotonic_time, list[dict]) when populated
 
 
 def _parse_csv(text: str) -> list[dict]:
