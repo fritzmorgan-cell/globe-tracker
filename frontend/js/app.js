@@ -723,16 +723,51 @@ async function showEntityTrack(type, id) {
   drawTrack(track, type);
 }
 
+// Tracks which satellite entity currently has entity.path enabled.
+let _satTrackEntity = null;
+
 /**
- * Compute and draw a satellite track from TLE data.
- * Propagates positions every 2 minutes for the past 3 hours (≈ 2 full orbits).
+ * Show a satellite track using entity.path — it stays connected to the moving
+ * entity because Cesium drives it from the same SampledPositionProperty.
+ *
+ * In live mode: backfill 3 hours of historical SGP4 samples into the entity's
+ * SampledPositionProperty so entity.path has data to draw, then enable it with
+ * trailTime = 3 h.  The track automatically follows the entity every frame.
+ *
+ * In replay mode: fall back to a static polyline (entity is ConstantPosition).
+ *
+ * @param {string} satId   NORAD ID string (key in _satEntityMap)
  * @param {object} satrec  satellite.js satrec object
  */
-function showSatelliteTrack(satrec) {
+function showSatelliteTrack(satId, satrec) {
   clearAllTracks();
-  const endMs   = liveMode ? Date.now() : replayTs * 1000;
-  const startMs = endMs - 3 * 60 * 60 * 1000;  // 3 hours back
-  const stepMs  = 2 * 60 * 1000;                // 2-minute steps
+
+  if (liveMode) {
+    const entity = _satEntityMap.get(satId);
+    if (!entity || !(entity.position instanceof Cesium.SampledPositionProperty)) return;
+
+    // Backfill 3 hours of historical samples (30 s steps = 360 samples).
+    const TRAIL_S = 3 * 60 * 60;
+    _addSatSamples(entity.position, satrec, new Date(Date.now() - TRAIL_S * 1000), TRAIL_S);
+
+    entity.path = new Cesium.PathGraphics({
+      trailTime: TRAIL_S,
+      leadTime:  0,
+      width:     1.5,
+      material:  new Cesium.PolylineGlowMaterialProperty({
+        color:      TRACK_COLORS.satellite,
+        glowPower:  0.15,
+      }),
+      resolution: 60,
+    });
+    _satTrackEntity = entity;
+    return;
+  }
+
+  // ── Replay mode: static polyline (entity has ConstantPositionProperty) ──────
+  const endMs   = replayTs * 1000;
+  const startMs = endMs - 3 * 60 * 60 * 1000;
+  const stepMs  = 2 * 60 * 1000;
 
   const points = [];
   for (let t = startMs; t <= endMs; t += stepMs) {
@@ -750,8 +785,6 @@ function showSatelliteTrack(satrec) {
     } catch (_) {}
   }
 
-  // Satellites orbit the whole globe — split the track at the antimeridian to
-  // prevent Cesium drawing a line straight through the Earth.
   const segments = [];
   let current = [];
   for (let i = 0; i < points.length; i++) {
@@ -763,7 +796,6 @@ function showSatelliteTrack(satrec) {
   }
   if (current.length > 1) segments.push(current);
 
-  // Draw each segment as a separate entity.
   segments.forEach((seg, idx) => {
     const coords = seg.flatMap(p => [p.lon, p.lat, p.altitude]);
     viewer.entities.add({
@@ -787,6 +819,12 @@ function clearAllTracks() {
     e => e.id && e.id.startsWith(TRACK_ENTITY_ID)
   );
   toRemove.forEach(e => viewer.entities.remove(e));
+
+  // Disable entity.path on the previously-tracked satellite (live mode).
+  if (_satTrackEntity) {
+    _satTrackEntity.path = undefined;
+    _satTrackEntity = null;
+  }
 }
 
 // ─── Info modal (planes + ships) ─────────────────────────────────────────────
@@ -1019,7 +1057,7 @@ viewer.screenSpaceEventHandler.setInputAction((click) => {
     document.getElementById('modalFooter').textContent = '';
     _setPhoto(null, '🛰');
     _selectEntity(props.id);
-    if (satrec) showSatelliteTrack(satrec);
+    if (satrec) showSatelliteTrack(String(props.id), satrec);
   } else if (props.id !== undefined) {
     openPlaneModal(props);
   }
