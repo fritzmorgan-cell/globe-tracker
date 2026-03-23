@@ -55,7 +55,7 @@ def _parse_csv(text: str) -> list[dict]:
             "lat":          round(lat, 6),
             "lon":          round(lon, 6),
             "elevation_ft": elevation_ft,
-            "altitude":     round(elevation_ft * 0.3048),  # metres for Cesium
+            "altitude":     round(elevation_ft * 0.3048) + 150,  # metres above ellipsoid (+150 m buffer above terrain)
             "type":         atype,
         })
     return records

@@ -247,12 +247,13 @@ const shipLayer = new EntityLayer(viewer, {
 });
 
 const airportLayer = new EntityLayer(viewer, {
-  idField:          'iata',
-  labelField:       'iata',
-  billboardUrl:     AIRPORT_ICON,
-  billboardScale:   1.0,
-  labelColor:       Cesium.Color.fromCssColorString('#ffb300'),
-  labelMaxDistance: 2_000_000,  // show IATA labels up to 2 000 km
+  idField:           'iata',
+  labelField:        'iata',
+  billboardUrl:      AIRPORT_ICON,
+  billboardScale:    1.0,
+  labelColor:        Cesium.Color.fromCssColorString('#ffb300'),
+  labelMaxDistance:  2_000_000,  // show IATA labels up to 2 000 km
+  disableDepthTest:  true,       // always draw on top of terrain
 });
 
 const SAT_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(`

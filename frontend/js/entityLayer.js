@@ -33,6 +33,8 @@ class EntityLayer {
     // Max camera distance (metres) at which labels are shown.
     // Increase for high-altitude objects like satellites.
     this._labelMaxDistance = options.labelMaxDistance ?? 800_000;
+    // When true, billboards render on top of terrain (never hidden underground).
+    this._disableDepthTest = options.disableDepthTest ?? false;
 
     /** @type {Map<string, Cesium.Entity>} */
     this._entities = new Map();
@@ -87,6 +89,8 @@ class EntityLayer {
             verticalOrigin:   Cesium.VerticalOrigin.CENTER,
             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
             sizeInMeters: false,
+            disableDepthTestDistance: this._disableDepthTest
+              ? Number.POSITIVE_INFINITY : undefined,
           } : undefined,
 
           label: {
