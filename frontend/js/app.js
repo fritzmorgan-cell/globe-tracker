@@ -415,14 +415,16 @@ async function loadBoundaries() {
     const base = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0';
     const [countries, states] = await Promise.all([
       Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_0_countries.geojson`, {
-        fill:        Cesium.Color.TRANSPARENT,
-        stroke:      Cesium.Color.WHITE.withAlpha(0.65),
-        strokeWidth: 1.5,
+        fill:         Cesium.Color.TRANSPARENT,
+        stroke:       Cesium.Color.WHITE.withAlpha(0.65),
+        strokeWidth:  1.5,
+        clampToGround: true,
       }),
       Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_1_states_provinces.geojson`, {
-        fill:        Cesium.Color.TRANSPARENT,
-        stroke:      Cesium.Color.WHITE.withAlpha(0.35),
-        strokeWidth: 0.8,
+        fill:         Cesium.Color.TRANSPARENT,
+        stroke:       Cesium.Color.WHITE.withAlpha(0.35),
+        strokeWidth:  0.8,
+        clampToGround: true,
       }),
     ]);
     viewer.dataSources.add(countries);
