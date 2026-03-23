@@ -804,7 +804,14 @@ document.getElementById('modalClose').addEventListener('click', () => {
 // Click handler — fires when the user clicks any entity on the globe.
 viewer.screenSpaceEventHandler.setInputAction((click) => {
   const picked = viewer.scene.pick(click.position);
-  if (!Cesium.defined(picked) || !Cesium.defined(picked.id)) return;
+  if (!Cesium.defined(picked) || !Cesium.defined(picked.id)) {
+    // Clicked on empty space — dismiss the modal.
+    modal.classList.remove('visible', 'ship-mode', 'airport-mode');
+    modalPhoto.src = '';
+    clearAllTracks();
+    _clearSelection();
+    return;
+  }
 
   const props = picked.id?.properties?.getValue(Cesium.JulianDate.now());
   if (!props) return;
