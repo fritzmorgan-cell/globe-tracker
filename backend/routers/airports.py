@@ -16,7 +16,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-AIRPORTS_CSV_URL = "https://ourairports.com/data/airports.csv"
+AIRPORTS_CSV_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv"
 CACHE_TTL = 86_400  # 24 hours
 
 _cache = None  # (monotonic_time, list[dict]) when populated
