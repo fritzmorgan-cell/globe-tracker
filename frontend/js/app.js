@@ -70,7 +70,7 @@ const _roadsLayer = viewer.imageryLayers.addImageryProvider(
     credit: '© OpenStreetMap contributors, © CARTO',
   })
 );
-_roadsLayer.alpha = 0.5;
+_roadsLayer.alpha = 0.75;
 _roadsLayer.show  = true;
 
 // ─── Icons (inline SVG data URIs — no extra network request) ─────────────────
@@ -453,9 +453,9 @@ async function loadBoundaries() {
   const base = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0';
   const [cr, sr] = await Promise.allSettled([
     _loadAsGroundLines(`${base}/ne_50m_admin_0_boundary_lines_land.geojson`,
-      Cesium.Color.WHITE.withAlpha(0.7), 1.5),
+      Cesium.Color.WHITE.withAlpha(0.9), 2.0),
     _loadAsGroundLines(`${base}/ne_50m_admin_1_states_provinces_lines.geojson`,
-      Cesium.Color.WHITE.withAlpha(0.4), 0.8),
+      Cesium.Color.WHITE.withAlpha(0.65), 1.2),
   ]);
   if (cr.status === 'fulfilled') _borderPrimitives.push(...cr.value);
   else console.error('[borders countries]', cr.reason);
