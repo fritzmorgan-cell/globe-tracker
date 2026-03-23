@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Environment — contains real API keys, never commit
+backend/.env
+
+# Runtime database (can be large; regenerates on run)
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
