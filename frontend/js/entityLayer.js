@@ -90,7 +90,7 @@ class EntityLayer {
             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
             sizeInMeters: false,
             disableDepthTestDistance: this._disableDepthTest
-              ? Number.POSITIVE_INFINITY : undefined,
+              ? 2_000_000 : undefined,  // disable depth-vs-terrain within 2 000 km only
           } : undefined,
 
           label: {
