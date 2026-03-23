@@ -99,9 +99,13 @@
     .dot-ship     { background: #aed581; }
     .dot-sat      { background: #ce93d8; }
     .dot-airport  { background: #ffb300; }
+    .dot-border   { background: #b0bec5; border-radius: 2px; }  /* square = lines */
+    .dot-road     { background: #ffcc80; border-radius: 2px; }
 
-    /* Airport checkbox accent */
+    /* Checkbox accents */
     #toggleAirports { accent-color: #ffb300; }
+    #toggleBorders  { accent-color: #b0bec5; }
+    #toggleRoads    { accent-color: #ffcc80; }
 
     /* ── Status bar ────────────────────────────────────────────────────── */
     #statusBar {
@@ -372,6 +376,20 @@
       <span class="dot dot-airport"></span>
       Airports
     </label>
+
+    <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+      <div style="font-size:10px;color:#757575;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Map Layers</div>
+      <label class="layer-toggle">
+        <input type="checkbox" id="toggleBorders" checked />
+        <span class="dot dot-border"></span>
+        Borders
+      </label>
+      <label class="layer-toggle">
+        <input type="checkbox" id="toggleRoads" checked />
+        <span class="dot dot-road"></span>
+        Roads
+      </label>
+    </div>
 
     <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
       <div style="font-size:10px;color:#757575;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Sat Group</div>

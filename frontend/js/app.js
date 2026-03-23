@@ -62,6 +62,17 @@ viewer.camera.setView({
   destination: Cesium.Cartesian3.fromDegrees(0, 20, 18_000_000),
 });
 
+// ─── Roads tile overlay (CartoDB Light, roads + city shapes, no labels) ───────
+const _roadsLayer = viewer.imageryLayers.addImageryProvider(
+  new Cesium.UrlTemplateImageryProvider({
+    url: 'https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
+    maximumLevel: 19,
+    credit: '© OpenStreetMap contributors, © CARTO',
+  })
+);
+_roadsLayer.alpha = 0.35;
+_roadsLayer.show  = true;
+
 // ─── Icons (inline SVG data URIs — no extra network request) ─────────────────
 
 const PLANE_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(`
@@ -393,6 +404,48 @@ document.getElementById('satGroup').addEventListener('change', e => {
 
 // Initial load.
 loadSatelliteGroup('visual');
+
+// ─── Borders (country + state/province outlines via Natural Earth GeoJSON) ────
+
+let _borderSources = [];
+
+async function loadBoundaries() {
+  if (_borderSources.length > 0) return;  // already loaded
+  try {
+    const base = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0';
+    const [countries, states] = await Promise.all([
+      Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_0_countries.geojson`, {
+        fill:        Cesium.Color.TRANSPARENT,
+        stroke:      Cesium.Color.WHITE.withAlpha(0.65),
+        strokeWidth: 1.5,
+      }),
+      Cesium.GeoJsonDataSource.load(`${base}/ne_50m_admin_1_states_provinces.geojson`, {
+        fill:        Cesium.Color.TRANSPARENT,
+        stroke:      Cesium.Color.WHITE.withAlpha(0.35),
+        strokeWidth: 0.8,
+      }),
+    ]);
+    viewer.dataSources.add(countries);
+    viewer.dataSources.add(states);
+    _borderSources = [countries, states];
+    console.log('[borders] loaded');
+  } catch (err) {
+    console.error('[borders]', err);
+  }
+}
+
+document.getElementById('toggleBorders').addEventListener('change', async e => {
+  if (e.target.checked) {
+    await loadBoundaries();
+    _borderSources.forEach(ds => { ds.show = true; });
+  } else {
+    _borderSources.forEach(ds => { ds.show = false; });
+  }
+});
+
+document.getElementById('toggleRoads').addEventListener('change', e => {
+  _roadsLayer.show = e.target.checked;
+});
 
 // ─── Airport layer ────────────────────────────────────────────────────────────
 
@@ -970,6 +1023,7 @@ document.getElementById('toggleShips').addEventListener('change', (e) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
+loadBoundaries();
 loadAirports();
 pollAll();
 pollHandle = setInterval(pollAll, POLL_INTERVAL_MS);
