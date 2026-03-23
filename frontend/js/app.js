@@ -318,25 +318,112 @@ function _clearSelection() {
   _selectionRing.show = false;
 }
 
-const satelliteLayer = new EntityLayer(viewer, {
-  idField:          'id',       // TLE catalog number
-  labelField:       'name',
-  billboardUrl:     SAT_ICON,
-  billboardScale:   0.8,
-  labelColor:       Cesium.Color.fromCssColorString('#ce93d8'),
-  labelMaxDistance: 50_000_000, // satellites are high — show labels from far away
-});
+// ─── Satellite propagation (SampledPositionProperty — smooth 60 fps motion) ───
+//
+// Instead of updating positions every 5 s (causing visible jumps), we pre-compute
+// SGP4 samples at 30-second intervals and store them in a SampledPositionProperty.
+// Cesium interpolates between samples on every render frame with no JS overhead.
 
-// ─── Satellite propagation ────────────────────────────────────────────────────
+let _satrecs     = [];
+const _satEntityMap = new Map();  // String(norad_id) → Cesium.Entity
 
-/** Parsed satrec objects: [{id, name, satrec}] */
-let _satrecs = [];
-let _satUpdateHandle = null;
+// Advance the Cesium clock in real-time so SampledPositionProperty animates.
+viewer.clock.clockStep     = Cesium.ClockStep.SYSTEM_CLOCK;
+viewer.clock.shouldAnimate = true;
+viewer.clock.multiplier    = 1;
+
+const SAT_STEP_S  = 30;    // SGP4 sample spacing (seconds)
+const SAT_AHEAD_S = 600;   // pre-compute 10 minutes ahead
+
+/** Compute Cartesian3 for a satrec at a given Date, or null on failure. */
+function _satPos(satrec, date) {
+  try {
+    const pv = satellite.propagate(satrec, date);
+    if (!pv?.position) return null;
+    const gmst = satellite.gstime(date);
+    const geo   = satellite.eciToGeodetic(pv.position, gmst);
+    return Cesium.Cartesian3.fromDegrees(
+      satellite.degreesLong(geo.longitude),
+      satellite.degreesLat(geo.latitude),
+      geo.height * 1000
+    );
+  } catch { return null; }
+}
+
+/** Append durationS seconds of 30 s samples to a SampledPositionProperty. */
+function _addSatSamples(prop, satrec, fromDate, durationS) {
+  const steps = Math.ceil(durationS / SAT_STEP_S);
+  for (let i = 0; i <= steps; i++) {
+    const date = new Date(fromDate.getTime() + i * SAT_STEP_S * 1000);
+    const pos  = _satPos(satrec, date);
+    if (pos) prop.addSample(Cesium.JulianDate.fromDate(date), pos);
+  }
+}
 
 /**
- * Load TLEs for a group, parse them into satrec objects, and start/restart
- * the position-update interval.
+ * (Re)build all satellite entities with SampledPositionProperty.
+ * Done in batches of 100 to avoid blocking the UI.
  */
+async function _buildSatEntities() {
+  _satEntityMap.forEach(e => viewer.entities.remove(e));
+  _satEntityMap.clear();
+
+  const visible  = document.getElementById('toggleSats').checked;
+  const labelClr = Cesium.Color.fromCssColorString('#ce93d8');
+  const now      = new Date();
+
+  for (let b = 0; b < _satrecs.length; b += 100) {
+    for (const { id, name, satrec } of _satrecs.slice(b, b + 100)) {
+      const prop = new Cesium.SampledPositionProperty();
+      prop.setInterpolationOptions({
+        interpolationDegree:    5,
+        interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
+      });
+      _addSatSamples(prop, satrec, now, SAT_AHEAD_S);
+
+      const entity = viewer.entities.add({
+        id:       String(id),
+        position: prop,
+        show:     visible,
+        billboard: {
+          image:  SAT_ICON,
+          scale:  0.8,
+          disableDepthTestDistance: 5_000_000,
+        },
+        label: {
+          text:             name,
+          font:             '11px sans-serif',
+          fillColor:        labelClr,
+          outlineColor:     Cesium.Color.BLACK,
+          outlineWidth:     2,
+          style:            Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset:      new Cesium.Cartesian2(0, -18),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 50_000_000),
+        },
+        properties: { id: String(id), name, _satrec: satrec },
+      });
+      _satEntityMap.set(String(id), entity);
+    }
+    await new Promise(r => setTimeout(r, 0));  // yield to browser between batches
+  }
+  document.getElementById('satCount').textContent = _satEntityMap.size;
+}
+
+/** Extend sample window so satellites stay smooth as wall-clock time advances. */
+async function _extendSatSamples() {
+  if (!liveMode) return;
+  const from = new Date(Date.now() + SAT_AHEAD_S * 500);  // half-way into current window
+  for (let b = 0; b < _satrecs.length; b += 100) {
+    for (const { id, satrec } of _satrecs.slice(b, b + 100)) {
+      const entity = _satEntityMap.get(String(id));
+      if (entity?.position instanceof Cesium.SampledPositionProperty)
+        _addSatSamples(entity.position, satrec, from, SAT_AHEAD_S);
+    }
+    await new Promise(r => setTimeout(r, 0));
+  }
+}
+setInterval(_extendSatSamples, SAT_AHEAD_S * 500);  // refresh before window expires
+
 async function loadSatelliteGroup(group) {
   document.getElementById('satCount').textContent = '…';
   try {
@@ -345,60 +432,46 @@ async function loadSatelliteGroup(group) {
     console.log(`[satellites] TLEs received from backend: ${tles.length}`);
     _satrecs = tles.map(t => {
       try {
-        return { id: t.id, name: t.name, satrec: satellite.twoline2satrec(t.tle1, t.tle2) };
-      } catch (e) {
-        console.warn('[satellites] failed to parse TLE for', t.name, e);
-        return null;
-      }
+        return { id: String(t.id), name: t.name, satrec: satellite.twoline2satrec(t.tle1, t.tle2) };
+      } catch { return null; }
     }).filter(Boolean);
     console.log(`[satellites] parsed ${_satrecs.length} satrecs for group '${group}'`);
-    updateSatellitePositions();
+    await _buildSatEntities();
   } catch (err) {
     console.error('[satellites]', err);
     document.getElementById('satCount').textContent = 'err';
   }
 }
 
-/** Propagate current positions for all loaded TLEs and push to EntityLayer. */
+/**
+ * In replay mode: compute satellite positions at a specific timestamp.
+ * Live mode is handled automatically by SampledPositionProperty.
+ */
 function updateSatellitePositions() {
   if (!document.getElementById('toggleSats').checked) return;
+  if (liveMode) return;  // live positions animate via SampledPositionProperty
 
-  const now  = (!liveMode && replayTs) ? new Date(replayTs * 1000) : new Date();
-  const gmst = satellite.gstime(now);
-  const records = [];
-
-  for (const { id, name, satrec } of _satrecs) {
-    try {
-      const pv = satellite.propagate(satrec, now);
-      if (!pv || !pv.position) continue;
-      const geo = satellite.eciToGeodetic(pv.position, gmst);
-      records.push({
-        id,
-        name,
-        lat:      satellite.degreesLat(geo.latitude),
-        lon:      satellite.degreesLong(geo.longitude),
-        altitude: geo.height * 1000,   // km → metres
-      });
-    } catch (_) { /* decayed orbit — skip */ }
+  const replayDate = new Date(replayTs * 1000);
+  for (const { id, satrec } of _satrecs) {
+    const entity = _satEntityMap.get(String(id));
+    if (!entity) continue;
+    const pos = _satPos(satrec, replayDate);
+    if (pos) entity.position = new Cesium.ConstantPositionProperty(pos);
   }
-
-  satelliteLayer.update(records);
-  document.getElementById('satCount').textContent = satelliteLayer.count;
+  document.getElementById('satCount').textContent = _satEntityMap.size;
 }
-
-// Update satellite positions every 5 seconds (they move fast).
-_satUpdateHandle = setInterval(updateSatellitePositions, 5_000);
 
 // Satellite visibility toggle.
 document.getElementById('toggleSats').addEventListener('change', e => {
-  satelliteLayer.setVisible(e.target.checked);
-  if (e.target.checked) updateSatellitePositions();
-  else document.getElementById('satCount').textContent = '—';
+  _satEntityMap.forEach(entity => { entity.show = e.target.checked; });
+  if (!e.target.checked) document.getElementById('satCount').textContent = '—';
+  else document.getElementById('satCount').textContent = _satEntityMap.size;
 });
 
-// Group selector — reload TLEs when changed.
+// Group selector — rebuild entities for the new group.
 document.getElementById('satGroup').addEventListener('change', e => {
-  satelliteLayer.clear();
+  _satEntityMap.forEach(entity => viewer.entities.remove(entity));
+  _satEntityMap.clear();
   loadSatelliteGroup(e.target.value);
 });
 
@@ -916,28 +989,37 @@ viewer.screenSpaceEventHandler.setInputAction((click) => {
     openShipModal(props);
   } else if (props.iata !== undefined) {
     openAirportModal(props);
-  } else if (props.altitude !== undefined && props.id !== undefined && !props.callsign !== undefined && _satrecs.some(s => s.id === String(props.id))) {
-    // Satellite entity — find its satrec and draw orbital track.
-    const sat = _satrecs.find(s => s.id === String(props.id));
-    modal.classList.remove('ship-mode');
+  } else if (_satEntityMap.has(String(props.id))) {
+    // Satellite entity — read live position from the entity's position property.
+    const satrec  = props._satrec;
+    const satEnt  = _satEntityMap.get(String(props.id));
+    let lat = null, lon = null, altKm = null;
+    const cesiumPos = satEnt?.position?.getValue(viewer.clock.currentTime);
+    if (cesiumPos) {
+      const carto = Cesium.Cartographic.fromCartesian(cesiumPos);
+      lat   = Cesium.Math.toDegrees(carto.latitude);
+      lon   = Cesium.Math.toDegrees(carto.longitude);
+      altKm = carto.height / 1000;
+    }
+    modal.classList.remove('ship-mode', 'airport-mode');
     _positionModal();
     modal.classList.add('visible');
-    document.getElementById('modalTitle').textContent    = props.name || props.id;
-    document.getElementById('modalSubtitle').textContent = 'Satellite';
+    document.getElementById('modalTitle').textContent     = props.name || props.id;
+    document.getElementById('modalSubtitle').textContent  = 'Satellite';
     document.getElementById('modalTypeBadge').textContent = 'Satellite';
     document.getElementById('modalRoute').classList.add('hidden');
     document.getElementById('statLabel1').textContent = 'Altitude';
     document.getElementById('statLabel2').textContent = 'Latitude';
     document.getElementById('statLabel3').textContent = 'Longitude';
     document.getElementById('statLabel4').textContent = 'NORAD ID';
-    document.getElementById('modalStat1').textContent = props.altitude != null ? `${Math.round(props.altitude / 1000)} km` : '—';
-    document.getElementById('modalStat2').textContent = props.lat != null ? props.lat.toFixed(2) + '°' : '—';
-    document.getElementById('modalStat3').textContent = props.lon != null ? props.lon.toFixed(2) + '°' : '—';
+    document.getElementById('modalStat1').textContent = altKm != null ? `${Math.round(altKm)} km` : '—';
+    document.getElementById('modalStat2').textContent = lat   != null ? lat.toFixed(2) + '°' : '—';
+    document.getElementById('modalStat3').textContent = lon   != null ? lon.toFixed(2) + '°' : '—';
     document.getElementById('modalStat4').textContent = props.id || '—';
     document.getElementById('modalFooter').textContent = '';
     _setPhoto(null, '🛰');
     _selectEntity(props.id);
-    if (sat) showSatelliteTrack(sat.satrec);
+    if (satrec) showSatelliteTrack(satrec);
   } else if (props.id !== undefined) {
     openPlaneModal(props);
   }
@@ -963,8 +1045,15 @@ function fmtTs(ts) {
 
 /** Switch to live mode — resume polling and reset UI. */
 function goLive() {
+  const wasReplay = !liveMode;
   liveMode = true;
   replayTs = null;
+  // Rebuild satellite entities with SampledPositionProperty for smooth animation.
+  if (wasReplay) {
+    viewer.clock.clockStep     = Cesium.ClockStep.SYSTEM_CLOCK;
+    viewer.clock.shouldAnimate = true;
+    _buildSatEntities();
+  }
   liveBtnEl.textContent = '● Live';
   liveBtnEl.classList.remove('replay-mode');
   replayTimeDisp.classList.remove('replay-mode');
