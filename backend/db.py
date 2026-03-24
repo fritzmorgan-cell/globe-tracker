@@ -206,7 +206,7 @@ HISTORY_TTL_SECONDS = 24 * 60 * 60  # keep only the last 24 hours
 
 
 async def clear_all() -> dict:
-    """Delete every row from planes and ships tables. Returns deleted counts."""
+    """Delete every row from planes and ships tables and VACUUM to reclaim disk space."""
     if _db is None:
         return {"planes": 0, "ships": 0}
     async with _write_lock:
@@ -215,7 +215,13 @@ async def clear_all() -> dict:
         cur = await _db.execute("DELETE FROM ships")
         ships_deleted = cur.rowcount
         await _db.commit()
-    print(f"[db] cleared {planes_deleted} plane rows, {ships_deleted} ship rows")
+        # VACUUM rewrites the database file to reclaim freed pages.
+        # It must run outside a transaction and resets journal mode to DELETE,
+        # so re-enable WAL afterwards.
+        await _db.execute("VACUUM")
+        await _db.execute("PRAGMA journal_mode=WAL")
+        await _db.commit()
+    print(f"[db] cleared {planes_deleted} plane rows, {ships_deleted} ship rows (vacuumed)")
     return {"planes": planes_deleted, "ships": ships_deleted}
 
 
