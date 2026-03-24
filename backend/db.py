@@ -205,6 +205,17 @@ async def get_ship_track(mmsi: str, since_ts: float, until_ts: float) -> list[di
 HISTORY_TTL_SECONDS = 24 * 60 * 60  # keep only the last 24 hours
 
 
+def _vacuum_sync() -> None:
+    """Run VACUUM in a plain sqlite3 connection (called via run_in_executor)."""
+    import sqlite3 as _sqlite3
+    conn = _sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("VACUUM")
+        conn.execute("PRAGMA journal_mode=WAL")
+    finally:
+        conn.close()
+
+
 async def clear_all() -> dict:
     """Delete every row from planes and ships tables and VACUUM to reclaim disk space."""
     if _db is None:
@@ -216,12 +227,15 @@ async def clear_all() -> dict:
         ships_deleted = cur.rowcount
         await _db.commit()
 
-    # VACUUM cannot run while the main connection has any cursor state active.
-    # Open a dedicated short-lived connection so it has exclusive access.
-    # VACUUM also resets journal mode to DELETE, so re-enable WAL after.
-    async with aiosqlite.connect(DB_PATH) as tmp:
-        await tmp.execute("VACUUM")
-        await tmp.execute("PRAGMA journal_mode=WAL")
+    # VACUUM requires no active transactions and resets journal_mode to DELETE.
+    # Run it in a thread executor with a plain sqlite3 connection so aiosqlite's
+    # internal state cannot interfere.  Failure is non-fatal — the DELETE already
+    # committed, so we log the error and carry on.
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _vacuum_sync)
+    except Exception as exc:
+        print(f"[db] VACUUM warning (data was cleared): {exc}")
 
     print(f"[db] cleared {planes_deleted} plane rows, {ships_deleted} ship rows (vacuumed)")
     return {"planes": planes_deleted, "ships": ships_deleted}
