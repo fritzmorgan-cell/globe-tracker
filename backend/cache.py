@@ -22,7 +22,10 @@ _plane_cache: dict[str, tuple[float, Any]] = {}
 _ship_cache: dict[str, tuple[float, Any]] = {}
 
 # Time-to-live in seconds before a cached entry is considered stale.
-CACHE_TTL_SECONDS = 10
+# OpenSky allows ~1 request per 10 s (anonymous) / 5 s (registered).
+# 30 s gives comfortable headroom and reduces rate-limit risk when the
+# user pans slightly (which changes the bbox key).
+CACHE_TTL_SECONDS = 30
 
 
 def _select_store(domain: str) -> dict:
@@ -40,6 +43,8 @@ async def get_or_fetch(
 ) -> Any:
     """
     Return cached data if fresh; otherwise call fetcher(), store, and return.
+    If fetcher raises (e.g. 429 rate-limit), return stale cached data when
+    available so the frontend keeps seeing the last known positions.
 
     Args:
         domain:  'planes' or 'ships'
@@ -54,7 +59,15 @@ async def get_or_fetch(
         if now - fetched_at < CACHE_TTL_SECONDS:
             return data
 
-    data = await fetcher()
+    try:
+        data = await fetcher()
+    except Exception:
+        # On upstream error return stale data if we have any; otherwise re-raise.
+        if key in store:
+            print(f"[cache] upstream error for {domain}/{key} — serving stale data")
+            return store[key][1]
+        raise
+
     store[key] = (now, data)
 
     # FUTURE HOOK — SQLite history write:
