@@ -215,12 +215,14 @@ async def clear_all() -> dict:
         cur = await _db.execute("DELETE FROM ships")
         ships_deleted = cur.rowcount
         await _db.commit()
-        # VACUUM rewrites the database file to reclaim freed pages.
-        # It must run outside a transaction and resets journal mode to DELETE,
-        # so re-enable WAL afterwards.
-        await _db.execute("VACUUM")
-        await _db.execute("PRAGMA journal_mode=WAL")
-        await _db.commit()
+
+    # VACUUM cannot run while the main connection has any cursor state active.
+    # Open a dedicated short-lived connection so it has exclusive access.
+    # VACUUM also resets journal mode to DELETE, so re-enable WAL after.
+    async with aiosqlite.connect(DB_PATH) as tmp:
+        await tmp.execute("VACUUM")
+        await tmp.execute("PRAGMA journal_mode=WAL")
+
     print(f"[db] cleared {planes_deleted} plane rows, {ships_deleted} ship rows (vacuumed)")
     return {"planes": planes_deleted, "ships": ships_deleted}
 
