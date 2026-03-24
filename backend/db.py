@@ -215,7 +215,6 @@ async def purge_old_records() -> dict:
         planes_deleted = cur.rowcount
         cur = await _db.execute("DELETE FROM ships WHERE ts < ?", (cutoff,))
         ships_deleted = cur.rowcount
-        await _db.execute("PRAGMA wal_checkpoint(PASSIVE)")
         await _db.commit()
     print(f"[db] purged {planes_deleted} plane rows, {ships_deleted} ship rows older than 24 h")
     return {"planes": planes_deleted, "ships": ships_deleted}
