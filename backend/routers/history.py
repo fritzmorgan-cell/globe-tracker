@@ -16,6 +16,7 @@ GET /api/history/ships?ts=&lamin=&lomin=&lamax=&lomax=
 import time
 import db
 from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -50,6 +51,13 @@ async def get_track(
 @router.get("/history/range")
 async def get_history_range():
     return await db.get_time_range()
+
+
+@router.post("/history/clear")
+async def clear_history():
+    """Delete all recorded plane and ship positions from the database."""
+    result = await db.clear_all()
+    return {"status": "ok", "deleted": result}
 
 
 @router.get("/history/planes")

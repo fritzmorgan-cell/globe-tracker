@@ -1198,6 +1198,26 @@ loadAirports();
 pollAll();
 pollHandle = setInterval(pollAll, POLL_INTERVAL_MS);
 
+// ─── Clear DB button ──────────────────────────────────────────────────────────
+document.getElementById('clearDbBtn').addEventListener('click', async () => {
+  if (!confirm('Delete all recorded plane and ship history from the database?')) return;
+  const btn = document.getElementById('clearDbBtn');
+  btn.disabled = true;
+  btn.textContent = 'Clearing…';
+  try {
+    const resp = await fetch(`${API_BASE}/api/history/clear`, { method: 'POST' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    btn.textContent = 'Cleared';
+    console.log('[db] cleared:', data.deleted);
+    setTimeout(() => { btn.textContent = 'Clear DB'; btn.disabled = false; }, 2000);
+  } catch (err) {
+    console.error('[db] clear failed:', err);
+    btn.textContent = 'Error';
+    setTimeout(() => { btn.textContent = 'Clear DB'; btn.disabled = false; }, 2000);
+  }
+});
+
 // Future extension hook — history/replay:
 //   Replace setInterval above with a timeline scrubber that calls
 //   GET /api/history?domain=planes&ts=<unix> (backed by the SQLite hook in cache.py).

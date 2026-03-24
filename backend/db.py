@@ -205,6 +205,20 @@ async def get_ship_track(mmsi: str, since_ts: float, until_ts: float) -> list[di
 HISTORY_TTL_SECONDS = 24 * 60 * 60  # keep only the last 24 hours
 
 
+async def clear_all() -> dict:
+    """Delete every row from planes and ships tables. Returns deleted counts."""
+    if _db is None:
+        return {"planes": 0, "ships": 0}
+    async with _write_lock:
+        cur = await _db.execute("DELETE FROM planes")
+        planes_deleted = cur.rowcount
+        cur = await _db.execute("DELETE FROM ships")
+        ships_deleted = cur.rowcount
+        await _db.commit()
+    print(f"[db] cleared {planes_deleted} plane rows, {ships_deleted} ship rows")
+    return {"planes": planes_deleted, "ships": ships_deleted}
+
+
 async def purge_old_records() -> dict:
     """Delete rows older than HISTORY_TTL_SECONDS. Returns counts of deleted rows."""
     if _db is None:
