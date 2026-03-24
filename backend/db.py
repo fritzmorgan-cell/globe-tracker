@@ -226,11 +226,14 @@ async def clear_all() -> dict:
         cur = await _db.execute("DELETE FROM ships")
         ships_deleted = cur.rowcount
         await _db.commit()
+        # Checkpoint + truncate the WAL on the main connection — only the
+        # connection that owns the WAL can shrink the -wal file.
+        await _db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        await _db.commit()
 
-    # VACUUM requires no active transactions and resets journal_mode to DELETE.
-    # Run it in a thread executor with a plain sqlite3 connection so aiosqlite's
-    # internal state cannot interfere.  Failure is non-fatal — the DELETE already
-    # committed, so we log the error and carry on.
+    # VACUUM compacts the main DB file.  Run it in a thread executor with a
+    # plain sqlite3 connection so aiosqlite's state cannot interfere.
+    # Non-fatal — the DELETE + checkpoint already freed the space.
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _vacuum_sync)
