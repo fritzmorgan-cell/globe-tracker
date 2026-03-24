@@ -202,6 +202,25 @@ async def get_ship_track(mmsi: str, since_ts: float, until_ts: float) -> list[di
     return [{"ts": r["ts"], "lat": r["lat"], "lon": r["lon"], "altitude": 0} for r in rows]
 
 
+HISTORY_TTL_SECONDS = 24 * 60 * 60  # keep only the last 24 hours
+
+
+async def purge_old_records() -> dict:
+    """Delete rows older than HISTORY_TTL_SECONDS. Returns counts of deleted rows."""
+    if _db is None:
+        return {"planes": 0, "ships": 0}
+    cutoff = time.time() - HISTORY_TTL_SECONDS
+    async with _write_lock:
+        cur = await _db.execute("DELETE FROM planes WHERE ts < ?", (cutoff,))
+        planes_deleted = cur.rowcount
+        cur = await _db.execute("DELETE FROM ships WHERE ts < ?", (cutoff,))
+        ships_deleted = cur.rowcount
+        await _db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        await _db.commit()
+    print(f"[db] purged {planes_deleted} plane rows, {ships_deleted} ship rows older than 24 h")
+    return {"planes": planes_deleted, "ships": ships_deleted}
+
+
 async def get_time_range() -> dict:
     """Return the oldest and newest timestamps across both tables."""
     if _db is None:

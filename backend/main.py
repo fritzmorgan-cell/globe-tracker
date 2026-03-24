@@ -27,10 +27,22 @@ from services import aisstream_client
 import db
 
 
+async def _purge_loop() -> None:
+    """Purge records older than 24 h once per hour."""
+    while True:
+        await asyncio.sleep(60 * 60)  # wait 1 hour between runs
+        try:
+            await db.purge_old_records()
+        except Exception as exc:
+            print(f"[db] purge error: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialise SQLite history store.
     await db.init()
+    # Run an initial purge on startup to clean up any leftover old data.
+    await db.purge_old_records()
 
     # Start aisstream.io WebSocket + periodic ship snapshot.
     tasks = []
@@ -40,6 +52,8 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(aisstream_client.snapshot_loop()))
     else:
         print("[aisstream] WARNING: AISSTREAM_API_KEY not set — ship data will be empty.")
+
+    tasks.append(asyncio.create_task(_purge_loop()))
 
     yield
 
