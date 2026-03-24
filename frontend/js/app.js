@@ -1199,22 +1199,45 @@ pollAll();
 pollHandle = setInterval(pollAll, POLL_INTERVAL_MS);
 
 // ─── Clear DB button ──────────────────────────────────────────────────────────
+// Two-click confirm: first click arms the button, second click within 3 s fires.
+let _clearDbArmed = false;
+let _clearDbTimer  = null;
+
 document.getElementById('clearDbBtn').addEventListener('click', async () => {
-  if (!confirm('Delete all recorded plane and ship history from the database?')) return;
   const btn = document.getElementById('clearDbBtn');
+
+  if (!_clearDbArmed) {
+    // First click — arm and wait for confirmation click.
+    _clearDbArmed = true;
+    btn.textContent = 'Sure? Click again';
+    btn.style.background = 'rgba(244,67,54,0.45)';
+    _clearDbTimer = setTimeout(() => {
+      _clearDbArmed = false;
+      btn.textContent = 'Clear DB';
+      btn.style.background = '';
+    }, 3000);
+    return;
+  }
+
+  // Second click — disarm and fire.
+  clearTimeout(_clearDbTimer);
+  _clearDbArmed = false;
   btn.disabled = true;
   btn.textContent = 'Clearing…';
+  btn.style.background = '';
+
   try {
     const resp = await fetch(`${API_BASE}/api/history/clear`, { method: 'POST' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    btn.textContent = 'Cleared';
+    btn.textContent = `Cleared (${data.deleted.planes}p / ${data.deleted.ships}s)`;
     console.log('[db] cleared:', data.deleted);
-    setTimeout(() => { btn.textContent = 'Clear DB'; btn.disabled = false; }, 2000);
+    setTimeout(() => { btn.textContent = 'Clear DB'; btn.disabled = false; }, 3000);
   } catch (err) {
     console.error('[db] clear failed:', err);
-    btn.textContent = 'Error';
-    setTimeout(() => { btn.textContent = 'Clear DB'; btn.disabled = false; }, 2000);
+    btn.textContent = 'Error — see console';
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = 'Clear DB'; }, 3000);
   }
 });
 
