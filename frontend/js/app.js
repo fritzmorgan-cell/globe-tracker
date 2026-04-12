@@ -916,6 +916,7 @@ function openPlaneModal(plane) {
   document.getElementById('modalStat3').textContent = plane.heading != null ? `${Math.round(plane.heading)}°` : 'Unknown';
   document.getElementById('modalStat4').textContent = '…';
   document.getElementById('modalFooter').textContent = `ICAO: ${plane.id || '—'}`;
+  _setSearchQuery(plane.callsign || plane.id || '');
   _setPhoto(null, '✈');
   _selectEntity(plane.id);
   _positionModal();
@@ -944,6 +945,7 @@ function openPlaneModal(plane) {
     if (info.registration) {
       document.getElementById('modalFooter').textContent =
         `ICAO: ${plane.id || '—'}  ·  Reg: ${info.registration}`;
+      _setSearchQuery(info.registration);
     }
     document.getElementById('modalTypeBadge').textContent = '';
 
@@ -978,6 +980,7 @@ function openShipModal(ship) {
   document.getElementById('modalStat3').textContent = ship.lat != null ? ship.lat.toFixed(4) : '—';
   document.getElementById('modalStat4').textContent = ship.mmsi || '—';
   document.getElementById('modalFooter').textContent = '';
+  _setSearchQuery(ship.name || String(ship.mmsi));
   _setPhoto(null, '⚓');
   _selectEntity(ship.mmsi);
   _positionModal();
@@ -1007,6 +1010,14 @@ document.getElementById('modalClose').addEventListener('click', () => {
   clearAllTracks();
   _clearSelection();
 });
+
+// Search button — opens a Google search in a new tab for the current entity.
+let _modalSearchQuery = '';
+function _setSearchQuery(q) { _modalSearchQuery = q; }
+function modalSearchOpen() {
+  if (!_modalSearchQuery) return;
+  window.open('https://www.google.com/search?q=' + encodeURIComponent(_modalSearchQuery), '_blank', 'noopener');
+}
 
 // Click handler — fires when the user clicks any entity on the globe.
 viewer.screenSpaceEventHandler.setInputAction((click) => {
@@ -1055,6 +1066,7 @@ viewer.screenSpaceEventHandler.setInputAction((click) => {
     document.getElementById('modalStat3').textContent = lon   != null ? lon.toFixed(2) + '°' : '—';
     document.getElementById('modalStat4').textContent = props.id || '—';
     document.getElementById('modalFooter').textContent = '';
+    _setSearchQuery((props.name || '') + ' satellite NORAD ' + (props.id || ''));
     _setPhoto(null, '🛰');
     _selectEntity(props.id);
     if (satrec) showSatelliteTrack(String(props.id), satrec);

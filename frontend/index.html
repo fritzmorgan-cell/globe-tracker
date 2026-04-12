@@ -305,6 +305,37 @@
       text-align: center;
     }
 
+    .modal-search-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: calc(100% - 40px);
+      margin: 8px 20px 16px;
+      padding: 7px 12px;
+      background: rgba(79, 195, 247, 0.08);
+      border: 1px solid rgba(79, 195, 247, 0.3);
+      border-radius: 6px;
+      color: #4fc3f7;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .modal-search-btn:hover {
+      background: rgba(79, 195, 247, 0.18);
+      border-color: rgba(79, 195, 247, 0.6);
+    }
+    #infoModal.ship-mode .modal-search-btn {
+      background: rgba(174, 213, 129, 0.08);
+      border-color: rgba(174, 213, 129, 0.3);
+      color: #aed581;
+    }
+    #infoModal.ship-mode .modal-search-btn:hover {
+      background: rgba(174, 213, 129, 0.18);
+      border-color: rgba(174, 213, 129, 0.6);
+    }
+
     /* ── Timeline / replay bar ─────────────────────────────────────────── */
     #timeline {
       position: absolute;
@@ -509,6 +540,10 @@
         </div>
       </div>
       <div class="modal-footer" id="modalFooter"></div>
+      <button class="modal-search-btn" id="modalSearchBtn" onclick="modalSearchOpen()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search for more info
+      </button>
     </div>
   </div>
 
